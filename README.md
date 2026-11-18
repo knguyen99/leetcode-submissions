@@ -1,2 +1,1 @@
-# leetcode-submissions
-LeetCode Submissions
+# LeetCode Solutions — @knguyen99

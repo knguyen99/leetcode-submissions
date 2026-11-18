@@ -1,5 +1,5 @@
 
-name: Sync LeetCode Solutions
+name: Sync LeetCode
 
 on:
   schedule:
@@ -18,34 +18,35 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install requests
+        run: pip install -r requirements.txt
 
-      - name: Fetch LeetCode submissions
+      - name: Sync accepted solutions
         env:
+          LEETCODE_USERNAME: ${{ vars.LEETCODE_USERNAME }}
           LEETCODE_SESSION: ${{ secrets.LEETCODE_SESSION }}
           LEETCODE_CSRF_TOKEN: ${{ secrets.LEETCODE_CSRF_TOKEN }}
         run: python scripts/sync.py
 
-      - name: Commit solutions
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Commit changes
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           git add solutions/
+
           if git diff --cached --quiet; then
+            echo "No new accepted solutions"
             exit 0
           fi
 
-          git commit -m "Sync LeetCode solutions"
-          git -c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)" push
+          git commit -m "Sync accepted LeetCode solutions"
+          git push

@@ -55,6 +55,14 @@ query submissionDetails($submissionId: Int!) {
 }
 """
 
+QUESTION_QUERY = """
+query questionData($titleSlug: String!) {
+  question(titleSlug: $titleSlug) {
+    questionFrontendId
+    titleSlug
+  }
+}
+"""
 
 class LeetCodeClient:
     def __init__(self):
@@ -124,6 +132,20 @@ class LeetCodeClient:
 
         details = data.get("submissionDetails")
         return details.get("code") if details else None
+    
+    def get_problem_number(self, title_slug):
+        data = self.query(
+            QUESTION_QUERY,
+            {"titleSlug": title_slug},
+        )
+    
+        question = data.get("question")
+        if not question:
+            raise RuntimeError(
+                f"Could not retrieve problem: {title_slug}"
+            )
+    
+        return question["questionFrontendId"]
 
 
 def sync():
@@ -133,38 +155,63 @@ def sync():
     print(f"Found {len(submissions)} accepted submissions")
 
     added = 0
+    problem_numbers = {}
 
     for submission in reversed(submissions):
         submission_id = str(submission["id"])
         slug = submission["titleSlug"]
-        language = submission.get("lang", "")
+        language = submission.get("lang", "unknown")
 
         extension = LANGUAGES.get(language, "txt")
 
-        folder = OUTPUT / slug
+        # Cache problem numbers to avoid repeated API calls.
+        if slug not in problem_numbers:
+            problem_numbers[slug] = (
+                client.get_problem_number(slug)
+            )
+            time.sleep(1)
+
+        problem_number = problem_numbers[slug]
+
+        # Pad numeric problem IDs to four digits.
+        formatted_number = (
+            problem_number.zfill(4)
+            if problem_number.isdigit()
+            else problem_number
+        )
+
+        # submissions/0001-two-sum/python3/
+        folder = (
+            Path("submissions")
+            / f"{formatted_number}-{slug}"
+            / language
+        )
+
         file_path = folder / f"{submission_id}.{extension}"
 
-        # Skip submissions already saved.
+        # Don't download duplicates.
         if file_path.exists():
             continue
 
-        # Fetch the actual source code.
         code = client.get_code(submission_id)
 
         if not code:
-            print(f"Skipping {submission_id}: code unavailable")
+            print(f"Skipping {submission_id}: no code")
             continue
 
         folder.mkdir(parents=True, exist_ok=True)
-        file_path.write_text(code, encoding="utf-8")
+        file_path.write_text(
+            code,
+            encoding="utf-8",
+        )
 
-        print(f"Added: {slug}/{file_path.name}")
+        print(f"Added: {file_path}")
         added += 1
 
-        # Avoid sending requests too quickly.
         time.sleep(1)
 
     print(f"Sync complete. Added {added} solutions.")
+
 
 
 if __name__ == "__main__":
